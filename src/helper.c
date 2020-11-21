@@ -116,6 +116,7 @@ int main(int argc, char **argv) {
     if (fgets(tok, MAX_PASSPHRASE_LEN + 1, stdin) == NULL) {
         die("failed to read passphrase: %m");
     }
+    fprintf(stderr, "helper: received %s\n", tok);
 
     char hextok[2 * MAX_PASSPHRASE_LEN + 1];
     char *s = tok, *h = hextok;
@@ -125,6 +126,7 @@ int main(int argc, char **argv) {
         s++;
     }
     *s = *h = '\0';
+    fprintf(stderr, "helper: encoded %s (%lu bytes)\n", hextok, strlen(hextok));
 
     int pipefd[2];
     if (pipe2(pipefd, O_CLOEXEC) < 0) {
@@ -170,9 +172,11 @@ int main(int argc, char **argv) {
         for (s = keygrip; *s; s++) {
             *s = toupper(*s);
         }
-        if (fprintf(p, "preset_passphrase %s -1 %s\n", keygrip, hextok) < 0) {
+        int n;
+        if ((n = fprintf(p, "preset_passphrase %s -1 %s\n", keygrip, hextok)) < 0) {
             die("failed to write to pipe: %m");
         }
+        fprintf(stderr, "helper: sent %d of %lu bytes of preset command for %s\n", n, strlen(hextok) + KEYGRIP_LEN + 23, keygrip);
     }
 
     fclose(p);

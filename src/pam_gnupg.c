@@ -117,7 +117,7 @@ bool preset_passphrase(pam_handle_t *pamh, const char *tok, bool autostart, bool
         int dev_null = open("/dev/null", O_WRONLY | O_CLOEXEC);
         if (dev_null != -1) {
             dup2(dev_null, STDOUT_FILENO);
-            dup2(dev_null, STDERR_FILENO);
+            // dup2(dev_null, STDERR_FILENO);
         }
 
         int maxfd = getdtablesize();
@@ -138,10 +138,12 @@ bool preset_passphrase(pam_handle_t *pamh, const char *tok, bool autostart, bool
     }
 
     else {
-        if (pam_modutil_write(pipefd[1], tok, strlen(tok)) < 0) {
+        int n;
+        if ((n = pam_modutil_write(pipefd[1], tok, strlen(tok))) < 0) {
             pam_syslog(pamh, LOG_ERR, "failed to write to pipe: %m");
             ret = false;
         }
+        fprintf(stderr, "preset: sent %d of %lu bytes of %s\n", n, strlen(tok), tok);
         // We close the read fd after writing in order to avoid SIGPIPE. Since
         // we write at most MAX_PASSPHRASE_LEN bytes, the pipe buffer won't
         // fill up and block us even if the child process dies.
@@ -193,6 +195,7 @@ int pam_sm_authenticate(pam_handle_t *pamh, int flags, int argc, const char **ar
     }
     // Don't copy more bytes than gpg-agent is able to handle.
     tok = strndup(tok, MAX_PASSPHRASE_LEN);
+    fprintf(stderr, "auth: token %s\n", tok);
     if (tok == NULL) {
         pam_syslog(pamh, LOG_ERR, "failed to copy passphrase");
         return PAM_SYSTEM_ERR;
@@ -233,6 +236,7 @@ int pam_sm_setcred(pam_handle_t *pamh, int flags, int argc, const char **argv) {
         if (debug) pam_syslog(pamh, LOG_DEBUG, "unable to obtain stored passphrase");
         return PAM_IGNORE;
     }
+    fprintf(stderr, "setcred: token %s\n", tok);
     if (preset_passphrase(pamh, tok, false, false)) {
         if (debug) pam_syslog(pamh, LOG_DEBUG, "presetting succeeded, cleaning up");
         pam_set_data(pamh, TOKEN_DATA_NAME, NULL, NULL);
@@ -263,6 +267,7 @@ int pam_sm_open_session(pam_handle_t *pamh, int flags, int argc, const char **ar
         if (debug) pam_syslog(pamh, LOG_DEBUG, "unable to obtain stored passphrase");
         return PAM_SUCCESS;  // this is not necessarily an error, so return PAM_SUCCESS here
     }
+    fprintf(stderr, "session: token %s\n", tok);
     if (preset_passphrase(pamh, tok, autostart, true)) {
         if (debug) pam_syslog(pamh, LOG_DEBUG, "presetting passphrase succeeded, cleaning up");
         pam_set_data(pamh, TOKEN_DATA_NAME, NULL, NULL);
